@@ -40,6 +40,7 @@ export class Auto {
     g.add(e1, e2);
 
     g.position.set(x, 0.6, z);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     scene.add(g);
     this.group = g;
     this.baseY = 0.6;
@@ -192,6 +193,7 @@ export class Estudante {
     g.add(book);
 
     g.position.set(x, 0, z);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     scene.add(g);
     this.group = g;
     this.home = new THREE.Vector3(x, 0, z);

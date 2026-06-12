@@ -11,6 +11,10 @@ import { HUD } from './hud.js';
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -29,7 +33,18 @@ const hemi = new THREE.HemisphereLight(0xcfe4ff, 0x6b5d48, 0.7);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffefd0, 1.4);
 sun.position.set(40, 60, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -90;
+sun.shadow.camera.right = 90;
+sun.shadow.camera.top = 90;
+sun.shadow.camera.bottom = -110;
+sun.shadow.camera.near = 10;
+sun.shadow.camera.far = 320;
+sun.shadow.bias = -0.0004;
 scene.add(sun);
+scene.add(sun.target);
+sun.target.position.set(0, 0, -30); // centro do mapa (pátio + largo)
 
 // estrelas (visíveis à noite)
 const starGeo = new THREE.BufferGeometry();
@@ -124,8 +139,8 @@ function updateDayNight(elapsed) {
   const ang = t * Math.PI * 2;
   const sunH = Math.sin(ang);                       // altura do sol (-1..1)
   sun.position.set(Math.cos(ang) * 80, sunH * 80, 30);
-  sun.intensity = Math.max(0, sunH) * 1.4;
-  hemi.intensity = 0.18 + Math.max(0, sunH) * 0.55;
+  sun.intensity = Math.max(0, sunH) * 2.4;
+  hemi.intensity = 0.32 + Math.max(0, sunH) * 0.75;
 
   // cor do céu: dia -> crepúsculo -> noite
   if (sunH > 0.25) tmpColor.copy(skyDay);
@@ -138,7 +153,7 @@ function updateDayNight(elapsed) {
 
   const night = sunH < 0.05;
   stars.material.opacity = night ? Math.min(1, (0.05 - sunH) * 4) : 0;
-  for (const l of world.nightLights) l.intensity = night ? 1.6 : 0;
+  for (const l of world.nightLights) l.intensity = night ? 2.4 : 0;
   for (const m of world.lampMats) m.emissive.setHex(night ? 0xffd070 : 0x000000);
 }
 

@@ -26,6 +26,8 @@ export class Player {
     this.walkPhase = 0;
 
     this.mesh = this.buildMesh();
+    this.mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    this.shieldMesh.castShadow = false;
     scene.add(this.mesh);
   }
 
