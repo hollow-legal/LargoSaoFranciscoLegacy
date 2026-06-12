@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arcadas Arcanas — Largo São Francisco Legacy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: Georgia, 'Times New Roman', serif; }
+    canvas { display: block; }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; color: #f0e6d2; user-select: none; }
+
+    /* Barras de vida e mana */
+    #bars { position: absolute; top: 18px; left: 18px; width: 240px; }
+    .bar { height: 14px; background: rgba(0,0,0,0.55); border: 1px solid rgba(240,230,210,0.4); border-radius: 7px; margin-bottom: 6px; overflow: hidden; }
+    .bar .fill { height: 100%; width: 100%; transition: width 0.15s ease; }
+    #hp .fill { background: linear-gradient(90deg, #8b1a1a, #d9483b); }
+    #mp .fill { background: linear-gradient(90deg, #1a3a8b, #4a7bd9); }
+
+    /* Contadores */
+    #counters { position: absolute; top: 18px; right: 18px; text-align: right; font-size: 15px; text-shadow: 0 1px 3px #000; line-height: 1.6; }
+
+    /* Seletor de feitiços */
+    #spellbar { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+    .spell { width: 130px; padding: 8px 6px; text-align: center; background: rgba(10,8,20,0.7); border: 1px solid rgba(240,230,210,0.35); border-radius: 8px; font-size: 12px; transition: all 0.15s ease; }
+    .spell .key { display: block; font-size: 10px; opacity: 0.7; }
+    .spell .name { display: block; font-style: italic; font-size: 14px; margin: 2px 0; }
+    .spell.active { border-color: #e8c45a; background: rgba(60,45,10,0.8); box-shadow: 0 0 14px rgba(232,196,90,0.5); }
+
+    /* Mensagens centrais */
+    #message { position: absolute; top: 32%; left: 50%; transform: translateX(-50%); font-size: 26px; font-style: italic; text-align: center; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.5s ease; max-width: 80%; }
+    #message.show { opacity: 1; }
+
+    /* Dica de interação */
+    #interact { position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%); font-size: 14px; background: rgba(0,0,0,0.6); padding: 6px 14px; border-radius: 6px; display: none; }
+
+    /* Mira */
+    #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 6px; height: 6px; border: 1px solid rgba(240,230,210,0.8); border-radius: 50%; }
+
+    /* Tela inicial */
+    #intro { position: fixed; inset: 0; background: radial-gradient(ellipse at center, #1a1430 0%, #050308 75%); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #f0e6d2; text-align: center; cursor: pointer; z-index: 10; padding: 24px; }
+    #intro h1 { font-size: 52px; letter-spacing: 4px; color: #e8c45a; text-shadow: 0 0 24px rgba(232,196,90,0.45); margin-bottom: 6px; }
+    #intro h2 { font-size: 18px; font-weight: normal; font-style: italic; opacity: 0.85; margin-bottom: 28px; }
+    #intro p { max-width: 640px; line-height: 1.7; font-size: 15px; opacity: 0.9; margin-bottom: 26px; }
+    #intro .controls { font-size: 13px; opacity: 0.75; line-height: 1.9; margin-bottom: 30px; }
+    #intro .start { font-size: 20px; color: #e8c45a; animation: pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="hud">
+    <div id="bars">
+      <div id="hp" class="bar"><div class="fill"></div></div>
+      <div id="mp" class="bar"><div class="fill"></div></div>
+    </div>
+    <div id="counters">
+      <div>📜 Folhas do Códice: <span id="cFolhas">0</span> / 11</div>
+      <div>⚖️ Autos Malditos: <span id="cAutos">0</span> / 8</div>
+    </div>
+    <div id="spellbar"></div>
+    <div id="message"></div>
+    <div id="interact"></div>
+    <div id="crosshair"></div>
+  </div>
+
+  <div id="intro">
+    <h1>ARCADAS ARCANAS</h1>
+    <h2>Largo São Francisco Legacy</h2>
+    <p>
+      São Paulo, em um tempo fora do tempo. Sob as arcadas da velha Academia do Largo de São
+      Francisco, fundada em 1827, esconde-se uma escola secreta de magia jurídica. Você é um(a)
+      calouro(a) das Arcadas — e na véspera da sua prova oral, os <em>Autos Malditos</em>, processos
+      esquecidos que ganharam vida nos porões, escaparam para o pátio. Recolha as 11 Folhas do
+      Códice perdidas e arquive os autos rebeldes com seus feitiços em latim forense.
+    </p>
+    <div class="controls">
+      <b>WASD</b> mover · <b>Mouse</b> câmera · <b>Shift</b> correr · <b>Espaço</b> pular<br/>
+      <b>Clique</b> lançar feitiço · <b>1 / 2 / 3</b> trocar feitiço · <b>E</b> conversar / interagir
+    </div>
+    <div class="start">— Clique para entrar nas Arcadas —</div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
