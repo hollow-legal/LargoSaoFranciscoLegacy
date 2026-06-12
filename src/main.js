@@ -93,14 +93,27 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => { player.keys[e.code] = false; });
 
 document.addEventListener('mousedown', (e) => {
-  if (document.pointerLockElement !== document.body || e.button !== 0) return;
+  if ((document.pointerLockElement !== document.body && !autoMode) || e.button !== 0) return;
   if (!spells.cast(player)) {
     hud.message('<small>Mana insuficiente...</small>', 1200);
   }
 });
 
 // ---------- Ciclo dia/noite (um dia = 4 minutos) ----------
-const DAY_LENGTH = 240;
+const DAY_LENGTH = 240;// Modo debug para testes e capturas: ?auto inicia sem pointer lock,
+// ?hora=0..1 ajusta a fração do dia, ?x= ?z= ?yaw= ?pitch= posicionam o jogador.
+const params = new URLSearchParams(location.search);
+const autoMode = params.has('auto');
+const timeOffset = (parseFloat(params.get('hora')) || 0) * DAY_LENGTH;
+if (autoMode) {
+  state.started = true;
+  intro.style.display = 'none';
+  if (params.has('x')) player.position.x = parseFloat(params.get('x'));
+  if (params.has('z')) player.position.z = parseFloat(params.get('z'));
+  if (params.has('yaw')) player.yaw = parseFloat(params.get('yaw'));
+  if (params.has('pitch')) player.pitch = parseFloat(params.get('pitch'));
+}
+
 const skyDay = new THREE.Color(0x9bb8d4);
 const skyDusk = new THREE.Color(0xd98a4a);
 const skyNight = new THREE.Color(0x0a0a1e);
@@ -149,7 +162,7 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
-  updateDayNight(elapsed);
+  updateDayNight(elapsed + timeOffset);
   world.waterMat.opacity = 0.75 + Math.sin(elapsed * 2) * 0.08;
 
   if (!state.started) {

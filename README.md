@@ -31,8 +31,8 @@ Mana regenera com o tempo. Vida regenera perto do **chafariz do Largo**.
 
 ## Como rodar
 
-Não há build: é HTML + ES modules, com Three.js carregado via CDN (precisa de internet).
-Basta servir a pasta com qualquer servidor estático:
+Não há build nem dependências: é HTML + ES modules, com o Three.js vendorizado em
+`vendor/` (funciona offline). Basta servir a pasta com qualquer servidor estático:
 
 ```bash
 # opção 1
@@ -55,6 +55,11 @@ E abrir <http://localhost:8000> no navegador.
 | `src/spells.js` | Feitiços, projéteis, partículas e som sintetizado (WebAudio) |
 | `src/entities.js`| Autos Malditos (IA simples), Folhas do Códice, estudantes NPC |
 | `src/hud.js` | Atualização da interface |
+| `vendor/` | Three.js r160 (módulo ES vendorizado) |
+
+Para testes e capturas de tela há um modo debug por parâmetros de URL:
+`?auto` inicia sem pointer lock, `&hora=0..1` fixa a fração do dia (0.25 = meio-dia,
+0.65 = noite) e `&x= &z= &yaw= &pitch=` posicionam o jogador e a câmera.
 
 Todo o cenário é gerado por código (sem assets externos): arcadas com arcos extrudados,
 chafariz, monumento, jacarandás em flor, postes que acendem à noite, céu com estrelas e
