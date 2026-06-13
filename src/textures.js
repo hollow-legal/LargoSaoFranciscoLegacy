@@ -482,6 +482,43 @@ export function inscriptionTexture(lines) {
   return { map: toTexture(cMap) };
 }
 
+// ---------- Mármore em xadrez (vestíbulo monumental) ----------
+export function marbleTexture() {
+  const size = 512;
+  const [cMap, map] = makeCanvas(size);
+  const n = 4, cell = size / n;             // textura cobre ~3,2m -> placa de 0,8m
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const darkCell = (r + c) % 2 === 0;
+      const L = darkCell ? 16 + Math.random() * 5 : 84 + Math.random() * 5;
+      map.fillStyle = `hsl(${darkCell ? 220 : 45},${darkCell ? 10 : 16}%,${L}%)`;
+      map.fillRect(c * cell, r * cell, cell, cell);
+      // veios do mármore
+      for (let v = 0; v < 3; v++) {
+        map.strokeStyle = darkCell
+          ? `hsla(220,12%,${40 + Math.random() * 20}%,0.25)`
+          : `hsla(40,18%,${55 + Math.random() * 15}%,0.45)`;
+        map.lineWidth = 0.8 + Math.random() * 1.6;
+        map.beginPath();
+        const x0 = c * cell + Math.random() * cell, y0 = r * cell;
+        map.moveTo(x0, y0);
+        map.bezierCurveTo(
+          x0 + (Math.random() - 0.5) * 50, y0 + cell * 0.35,
+          x0 + (Math.random() - 0.5) * 50, y0 + cell * 0.7,
+          x0 + (Math.random() - 0.5) * 30, y0 + cell
+        );
+        map.stroke();
+      }
+      // junta
+      map.strokeStyle = 'hsla(0,0%,8%,0.5)';
+      map.lineWidth = 2;
+      map.strokeRect(c * cell, r * cell, cell, cell);
+    }
+  }
+  noiseOverlay(map, size, { scales: [64, 256], alpha: 0.04 });
+  return { map: toTexture(cMap) };
+}
+
 // Helper: material PBR com mapa repetido na escala dada
 export function texturedMaterial({ map, bump }, repeatX, repeatY, opts = {}) {
   const m = map.clone();

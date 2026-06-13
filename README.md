@@ -61,6 +61,9 @@ Para testes e capturas de tela há um modo debug por parâmetros de URL:
 `?auto` inicia sem pointer lock, `&hora=0..1` fixa a fração do dia (0.25 = meio-dia,
 0.65 = noite) e `&x= &z= &yaw= &pitch=` posicionam o jogador e a câmera.
 
-Todo o cenário é gerado por código (sem assets externos): arcadas com arcos extrudados,
-chafariz, monumento, jacarandás em flor, postes que acendem à noite, céu com estrelas e
-prédios do centro de São Paulo ao fundo.
+Todo o cenário é gerado por código (sem assets externos), com o edifício modelado a
+partir da planta baixa real e de fotos de referência: térreo rusticado + 3 pavimentos,
+pórtico de colunas colossais com relógio no frontão, vestíbulo monumental com escadarias
+gêmeas curvas e piso de mármore em xadrez, alas de profundidades diferentes (como na
+planta), Pátio das Arcadas, palmeiras imperiais, chafariz, calçada portuguesa no Largo,
+postes que acendem à noite, céu com estrelas e prédios do centro de São Paulo ao fundo.

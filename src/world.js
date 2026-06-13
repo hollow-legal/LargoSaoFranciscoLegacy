@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import {
   limestoneTexture, rusticationTexture, roofTexture, flagstoneTexture,
   portuguesePavementTexture, woodTexture, windowTexture, clockTexture,
-  inscriptionTexture, texturedMaterial,
+  inscriptionTexture, marbleTexture, texturedMaterial,
 } from './textures.js';
 
 export const PATIO = { minX: -30, maxX: 30, minZ: -30, maxZ: 30 };
@@ -31,8 +31,9 @@ const MAT = {
   calcarioPatio: texturedMaterial(TEX.limePatio, 0.25, 0.25),      // arcadas do pátio
   rusticado: texturedMaterial(TEX.rust, 0.25, 0.25, { bumpScale: 1.0 }),
   telhado: texturedMaterial(TEX.roof, 0.35, 0.35, { bumpScale: 0.8 }),
-  chaoPatio: texturedMaterial(TEX.flag, 0.18, 0.18),
-  chaoLargo: texturedMaterial(TEX.pav, 0.08, 0.08),
+  // pisos são BoxGeometry (UV 0..1): repeat dimensionado pelo tamanho real
+  chaoPatio: texturedMaterial(TEX.flag, 78 / 7.2, 78 / 7.2),     // lajão ~1,2m
+  chaoLargo: texturedMaterial(TEX.pav, 100 / 10, 64 / 10),       // pedra ~13cm
   madeira: new THREE.MeshStandardMaterial({ map: TEX.wood.map, roughness: 0.85 }),
   janela: new THREE.MeshStandardMaterial({ map: TEX.win.map, roughness: 0.3, metalness: 0.05 }),
   janelaArco: new THREE.MeshStandardMaterial({ map: TEX.winArch.map, roughness: 0.3, metalness: 0.05 }),
@@ -56,6 +57,15 @@ const P1 = 3.8, P2 = 3.6;             // 1º e 2º pavimentos
 const C2 = 0.4;                       // cornija intermediária
 const P3 = 2.9;                       // 3º pavimento (sótão de janelas menores)
 const TOPO = H0 + C1 + P1 + P2 + C2 + P3;   // ~16.0
+
+// BoxGeometry tem UV 0..1 por face: o repeat precisa ser proporcional ao
+// tamanho da caixa para a pedra manter a escala real (1 tile = `per` metros)
+const matCache = new Map();
+function sizedStone(tex, w, h, opts = {}, per = 4) {
+  const key = `${tex.map.uuid}|${(w / per).toFixed(2)}|${(h / per).toFixed(2)}|${opts.bumpScale ?? ''}|${opts.roughness ?? ''}`;
+  if (!matCache.has(key)) matCache.set(key, texturedMaterial(tex, w / per, h / per, opts));
+  return matCache.get(key);
+}
 
 // ---------- Colisores ----------
 export const colliders = { boxes: [], circles: [] };
@@ -147,7 +157,9 @@ function balcony(width) {
 }
 
 // ---------- Ala do pátio: arcada no térreo + 3 pavimentos de janelas ----------
-function buildWing(length) {
+// `depth` = profundidade do corpo superior (a planta real tem alas de pesos
+// diferentes: as alas dos salões são bem mais profundas que as galerias)
+function buildWing(length, depth = 4.9) {
   const wing = new THREE.Group();
   const panelW = 4;
   const count = Math.round(length / panelW);
@@ -165,10 +177,10 @@ function buildWing(length) {
   corn1.position.set(0, H0 + C1 / 2, 0.1);
   wing.add(corn1);
 
-  // corpo superior (3 pavimentos) — parede cheia sobre a arcada
+  // corpo superior (3 pavimentos)
   const upperH = P1 + P2 + C2 + P3;
-  const upper = new THREE.Mesh(new THREE.BoxGeometry(length, upperH, 4.9), MAT.calcario);
-  upper.position.set(0, H0 + C1 + upperH / 2, -2.15);
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(length, upperH, depth), sizedStone(TEX.limeFacade, length, upperH));
+  upper.position.set(0, H0 + C1 + upperH / 2, -depth / 2 + 0.3);
   wing.add(upper);
 
   // janelas dos pavimentos (face interna ao pátio)
@@ -190,21 +202,21 @@ function buildWing(length) {
   const corn2 = new THREE.Mesh(new THREE.BoxGeometry(length + 0.3, C2, 0.8), MAT.calcario);
   corn2.position.set(0, H0 + C1 + P1 + P2 + C2 / 2, 0.25);
   wing.add(corn2);
-  const corn3 = new THREE.Mesh(new THREE.BoxGeometry(length + 0.6, 0.5, 5.6), MAT.calcario);
-  corn3.position.set(0, TOPO + 0.25, -1.9);
+  const corn3 = new THREE.Mesh(new THREE.BoxGeometry(length + 0.6, 0.5, depth + 0.7), MAT.calcario);
+  corn3.position.set(0, TOPO + 0.25, -depth / 2 + 0.3);
   wing.add(corn3);
 
   // parede de fundo da galeria térrea + laje (teto da galeria)
-  const fundo = new THREE.Mesh(new THREE.BoxGeometry(length, H0, 0.5), MAT.calcarioPatio);
+  const fundo = new THREE.Mesh(new THREE.BoxGeometry(length, H0, 0.5), sizedStone(TEX.limePatio, length, H0));
   fundo.position.set(0, H0 / 2, -4.25);
   wing.add(fundo);
   const laje = new THREE.Mesh(new THREE.BoxGeometry(length, 0.35, 4.6), MAT.calcario);
   laje.position.set(0, H0 + 0.2, -2.1);
   wing.add(laje);
 
-  // telhado de telhas coloniais
-  const roof = roofPrism(length + 0.8, 7.4, 2.5);
-  roof.position.set(0, TOPO + 0.5, -1.9);
+  // telhado de telhas coloniais (largura acompanha o peso da ala)
+  const roof = roofPrism(length + 0.8, depth + 2.5, 2.5 + depth * 0.12);
+  roof.position.set(0, TOPO + 0.5, -depth / 2 + 0.3);
   wing.add(roof);
 
   return wing;
@@ -213,10 +225,10 @@ function buildWing(length) {
 // Bloco de canto (liga as alas; telhado piramidal — sem torres, como no real)
 function buildCorner(scene, x, z) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(9.4, TOPO, 9.4), MAT.calcario);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(9.4, TOPO, 9.4), sizedStone(TEX.limeFacade, 9.4, TOPO));
   body.position.y = TOPO / 2;
   g.add(body);
-  const base = new THREE.Mesh(new THREE.BoxGeometry(9.8, H0, 9.8), MAT.rusticado);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(9.8, H0, 9.8), sizedStone(TEX.rust, 9.8, H0, { bumpScale: 1.0 }));
   base.position.y = H0 / 2;
   g.add(base);
   const corn = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.5, 10.0), MAT.calcario);
@@ -242,16 +254,16 @@ function buildFacade(scene) {
   const zC = -40.1;                       // corpo central avançado
 
   // ----- alas laterais -----
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(56, TOPO, 1.6), MAT.calcario);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(56, TOPO, 1.6), sizedStone(TEX.limeFacade, 56, TOPO));
   slab.position.set(0, TOPO / 2, zF + 0.8);
   g.add(slab);
   // térreo rusticado
-  const rustStrip = new THREE.Mesh(new THREE.BoxGeometry(56.3, H0, 1.8), MAT.rusticado);
+  const rustStrip = new THREE.Mesh(new THREE.BoxGeometry(56.3, H0, 1.8), sizedStone(TEX.rust, 56.3, H0, { bumpScale: 1.0 }));
   rustStrip.position.set(0, H0 / 2, zF + 0.8);
   g.add(rustStrip);
   // cunhais rusticados nos cantos
   for (const qx of [-27.6, 27.6]) {
-    const quoin = new THREE.Mesh(new THREE.BoxGeometry(1.6, TOPO, 2.1), MAT.rusticado);
+    const quoin = new THREE.Mesh(new THREE.BoxGeometry(1.6, TOPO, 2.1), sizedStone(TEX.rust, 1.6, TOPO, { bumpScale: 1.0 }));
     quoin.position.set(qx, TOPO / 2, zF + 0.8);
     g.add(quoin);
   }
@@ -298,13 +310,20 @@ function buildFacade(scene) {
     g.add(pin);
   }
 
-  // ----- corpo central com pórtico -----
-  const corpo = new THREE.Mesh(new THREE.BoxGeometry(24, TOPO, 1.6), MAT.calcario);
-  corpo.position.set(0, TOPO / 2, zC + 0.8);
-  g.add(corpo);
-  const corpoRust = new THREE.Mesh(new THREE.BoxGeometry(24.3, H0 + 0.6, 1.8), MAT.rusticado);
-  corpoRust.position.set(0, (H0 + 0.6) / 2, zC + 0.8);
-  g.add(corpoRust);
+  // ----- corpo central com pórtico (com abertura real no eixo do portal) -----
+  const corpoMat = sizedStone(TEX.limeFacade, 9.4, TOPO);
+  for (const side of [-1, 1]) {
+    const corpo = new THREE.Mesh(new THREE.BoxGeometry(9.4, TOPO, 1.6), corpoMat);
+    corpo.position.set(side * 7.3, TOPO / 2, zC + 0.8);
+    g.add(corpo);
+    const corpoRust = new THREE.Mesh(new THREE.BoxGeometry(9.6, H0 + 0.6, 1.8), sizedStone(TEX.rust, 9.6, H0 + 0.6, { bumpScale: 1.0 }));
+    corpoRust.position.set(side * 7.3, (H0 + 0.6) / 2, zC + 0.8);
+    g.add(corpoRust);
+  }
+  // verga sobre o vão central (da altura do arco ao topo)
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(5.2, TOPO - 6.0, 1.6), sizedStone(TEX.limeFacade, 5.2, TOPO - 6.0));
+  lintel.position.set(0, 6.0 + (TOPO - 6.0) / 2, zC + 0.8);
+  g.add(lintel);
 
   // três portais em arco
   const portalGeo = archPanelGeometry(7.0, H0 + 0.6, 0.8, 4.2, 5.2);
@@ -395,7 +414,7 @@ function buildFacade(scene) {
   }
 
   // telhado raso de ligação com a ala norte
-  const ligacao = new THREE.Mesh(new THREE.BoxGeometry(56, 0.4, 4.6), MAT.telhado);
+  const ligacao = new THREE.Mesh(new THREE.BoxGeometry(56, 0.4, 4.6), sizedStone(TEX.roof, 56, 4.6, { bumpScale: 0.8 }, 2.9));
   ligacao.position.set(0, TOPO - 0.3, -36.2);
   g.add(ligacao);
 
@@ -418,9 +437,117 @@ function buildFacade(scene) {
   }
 }
 
+// ---------- Vestíbulo monumental (entre o portal do Largo e o Pátio) ----------
+// Conforme a planta: hall no eixo da entrada com duas escadarias curvas
+// simétricas, piso de mármore em xadrez e pé-direito duplo.
+function buildHall(scene) {
+  const g = new THREE.Group();
+  const marble = marbleTexture();
+  const matMarble = texturedMaterial(marble, 0.31, 0.31, { roughness: 0.35 });
+  const zFront = -38.3, zBack = -30.0;            // do portal ao arco do pátio
+  const halfW = 10.4;
+  const len = zBack - zFront;                     // 8.3
+  const zMid = (zFront + zBack) / 2;
+  const ceilH = 8.4;
+
+  // piso de mármore (repeat dimensionado: placa ~0,8m)
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(halfW * 2, 0.14, len + 0.6),
+    texturedMaterial(marble, (halfW * 2) / 3.2, (len + 0.6) / 3.2, { roughness: 0.35 })
+  );
+  floor.position.set(0, 0.07, zMid);
+  g.add(floor);
+
+  // paredes laterais com pilastras
+  for (const side of [-1, 1]) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, ceilH, len), sizedStone(TEX.limePatio, len, ceilH));
+    wall.position.set(side * halfW, ceilH / 2, zMid);
+    g.add(wall);
+    for (let i = 0; i < 3; i++) {
+      const pil = new THREE.Mesh(new THREE.BoxGeometry(0.35, ceilH - 0.8, 0.8), MAT.calcario);
+      pil.position.set(side * (halfW - 0.4), (ceilH - 0.8) / 2, zFront + 1.6 + i * 2.8);
+      g.add(pil);
+    }
+  }
+  // paredes de fundo ladeando o arco do pátio e a frente ladeando o portal
+  for (const side of [-1, 1]) {
+    const back = new THREE.Mesh(new THREE.BoxGeometry(halfW - 3.4, ceilH, 0.5), sizedStone(TEX.limePatio, halfW - 3.4, ceilH));
+    back.position.set(side * (3.4 + (halfW - 3.4) / 2), ceilH / 2, zBack);
+    g.add(back);
+    const front = new THREE.Mesh(new THREE.BoxGeometry(halfW - 3.4, ceilH, 0.5), sizedStone(TEX.limePatio, halfW - 3.4, ceilH));
+    front.position.set(side * (3.4 + (halfW - 3.4) / 2), ceilH / 2, zFront);
+    g.add(front);
+  }
+
+  // forro com lanternim central iluminado
+  const ceil = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 + 1, 0.5, len + 1), MAT.calcario);
+  ceil.position.set(0, ceilH + 0.25, zMid);
+  g.add(ceil);
+  const sky = new THREE.Mesh(
+    new THREE.CircleGeometry(2.2, 24),
+    new THREE.MeshBasicMaterial({ color: 0xfff2d0 })
+  );
+  sky.rotation.x = Math.PI / 2;
+  sky.position.set(0, ceilH - 0.02, zMid);
+  g.add(sky);
+  const hallLight = new THREE.PointLight(0xffe2b0, 3.0, 26, 1.5);
+  hallLight.position.set(0, ceilH - 1.5, zMid);
+  g.add(hallLight);
+
+  // escadarias gêmeas curvas (quarto de volta, espelhadas)
+  const steps = 11, rise = 3.6 / steps, stepGeo = new THREE.BoxGeometry(2.3, 0.34, 1.15);
+  for (const side of [-1, 1]) {
+    const cx = side * 6.2, cz = zMid - 0.4, R = 3.1;
+    for (let i = 0; i < steps; i++) {
+      const a = (i / (steps - 1)) * (Math.PI / 2);   // 0 = de frente, 90° = junto à parede
+      const step = new THREE.Mesh(stepGeo, matMarble);
+      step.position.set(
+        cx + side * Math.sin(a) * R * 0.4,
+        rise * (i + 0.5),
+        cz + Math.cos(a) * R - R * 0.4
+      );
+      step.rotation.y = side * a * 0.9;
+      g.add(step);
+    }
+    // patamar superior com balaustrada
+    const landing = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.4, 2.6), matMarble);
+    landing.position.set(cx + side * 1.6, 3.6, zMid - 2.6);
+    g.add(landing);
+    const balGeo = new THREE.CylinderGeometry(0.06, 0.09, 0.6, 6);
+    for (let bi = 0; bi < 6; bi++) {
+      const b = new THREE.Mesh(balGeo, MAT.calcario);
+      b.position.set(cx + side * 1.6 - 1.5 + bi * 0.6, 4.1, zMid - 1.4);
+      g.add(b);
+    }
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.1, 0.16), MAT.calcario);
+    rail.position.set(cx + side * 1.6, 4.45, zMid - 1.4);
+    g.add(rail);
+  }
+
+  // busto no nicho entre as escadas (homenagem aos fundadores)
+  const nichePed = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.5, 1.1), MAT.calcario);
+  nichePed.position.set(0, 0.75, zMid - 2.8);
+  g.add(nichePed);
+  const bust = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 10), MAT.bronze);
+  bust.position.set(0, 1.85, zMid - 2.8);
+  g.add(bust);
+
+  scene.add(g);
+
+  // colisores: paredes laterais, trechos de fundo/frente e escadas
+  addBoxCollider(-halfW - 0.1, zMid, 0.7, len);
+  addBoxCollider(halfW + 0.1, zMid, 0.7, len);
+  for (const side of [-1, 1]) {
+    addBoxCollider(side * (3.4 + (halfW - 3.4) / 2), zBack, halfW - 3.4, 0.6);
+    addBoxCollider(side * (3.4 + (halfW - 3.4) / 2), zFront, halfW - 3.4, 0.6);
+    colliders.circles.push({ x: side * 6.4, z: zMid - 1.2, r: 3.0 });
+  }
+  colliders.circles.push({ x: 0, z: zMid - 2.8, r: 0.9 });
+}
+
 // ---------- Alas ao redor do pátio ----------
 function buildArcadas(scene) {
-  const make = (rotY, px, pz, withGate) => {
+  const make = (rotY, px, pz, withGate, opts = {}) => {
     const g = new THREE.Group();
     if (withGate) {
       const a = buildWing(24);
@@ -432,30 +559,32 @@ function buildArcadas(scene) {
       gate.position.set(0, 0, -0.4);
       g.add(gate);
       const upperH = P1 + P2 + C2 + P3;
-      const sobre = new THREE.Mesh(new THREE.BoxGeometry(8, C1 + upperH, 4.9), MAT.calcario);
+      const sobre = new THREE.Mesh(new THREE.BoxGeometry(8, C1 + upperH, 4.9), sizedStone(TEX.limeFacade, 8, C1 + upperH));
       sobre.position.set(0, H0 + (C1 + upperH) / 2, -2.15);
       g.add(sobre);
     } else {
-      g.add(buildWing(56));
+      g.add(buildWing(56, opts.depth));
     }
     g.rotation.y = rotY;
     g.position.set(px, 0, pz);
     scene.add(g);
   };
 
-  make(0, 0, PATIO.minZ, true);
-  make(Math.PI, 0, PATIO.maxZ, false);
-  make(Math.PI / 2, PATIO.minX, 0, false);
-  make(-Math.PI / 2, PATIO.maxX, 0, false);
+  // pesos conforme a planta: alas dos salões (sul e oeste) bem mais profundas
+  make(0, 0, PATIO.minZ, true);                              // norte: entrada/galeria
+  make(Math.PI, 0, PATIO.maxZ, false, { depth: 10.5 });      // sul (R. Cristóvão Colombo)
+  make(Math.PI / 2, PATIO.minX, 0, false, { depth: 8.5 });   // oeste (R. Riachuelo)
+  make(-Math.PI / 2, PATIO.maxX, 0, false, { depth: 4.9 });  // leste: galeria
 
   buildCorner(scene, -32, -32);
   buildCorner(scene, 32, -32);
   buildCorner(scene, -32, 32);
   buildCorner(scene, 32, 32);
 
-  // colisores das paredes de fundo (galeria térrea transitável)
-  addBoxCollider(-16, PATIO.minZ - 6.25, 26, 4.5);
-  addBoxCollider(16, PATIO.minZ - 6.25, 26, 4.5);
+  // colisores das paredes de fundo (galeria térrea transitável; o trecho
+  // central da ala norte fica livre — é o vestíbulo monumental)
+  addBoxCollider(-20, PATIO.minZ - 6.25, 18, 4.5);
+  addBoxCollider(20, PATIO.minZ - 6.25, 18, 4.5);
   addBoxCollider(0, PATIO.maxZ + 6.25, 58, 4.5);
   addBoxCollider(PATIO.minX - 6.25, 0, 4.5, 58);
   addBoxCollider(PATIO.maxX + 6.25, 0, 4.5, 58);
@@ -645,6 +774,7 @@ export function buildWorld(scene) {
 
   buildArcadas(scene);
   buildFacade(scene);
+  buildHall(scene);
   buildMonument(scene);
   buildChurch(scene);
 
@@ -686,7 +816,7 @@ export function buildWorld(scene) {
     });
 
   const mkWall = (cx, cz, sx, sz) => {
-    const w = new THREE.Mesh(new THREE.BoxGeometry(sx, 3, sz), MAT.calcarioPatio);
+    const w = new THREE.Mesh(new THREE.BoxGeometry(sx, 3, sz), sizedStone(TEX.limePatio, Math.max(sx, sz), 3));
     w.position.set(cx, 1.5, cz);
     scene.add(w);
     addBoxCollider(cx, cz, sx, sz);
@@ -722,7 +852,10 @@ export function buildWorld(scene) {
 // ---------- Colisão do jogador ----------
 export function resolveCollisions(pos, r) {
   const inLargo = pos.z < PATIO.minZ - 8;
-  const inGate = Math.abs(pos.x) < 3.4 && pos.z >= PATIO.minZ - 12 && pos.z <= PATIO.minZ + 1;
+  // passagem livre: portal externo + vestíbulo monumental + arco do pátio
+  const inGate =
+    (Math.abs(pos.x) < 3.4 && pos.z >= PATIO.minZ - 12 && pos.z <= PATIO.minZ + 1) ||
+    (Math.abs(pos.x) < 10.2 && pos.z >= PATIO.minZ - 8.2 && pos.z <= PATIO.minZ + 0.4);
   if (!inGate) {
     if (pos.z >= PATIO.minZ - 1) {
       pos.x = Math.max(PATIO.minX - 7.5 + r, Math.min(PATIO.maxX + 7.5 - r, pos.x));
