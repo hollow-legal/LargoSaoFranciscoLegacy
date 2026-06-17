@@ -24,6 +24,7 @@ export class Player {
     this.keys = {};
     this.moving = false;
     this.walkPhase = 0;
+    this.camDist = 6.2;
 
     this.mesh = this.buildMesh();
     this.mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
@@ -196,7 +197,7 @@ export class Player {
     }
 
     // câmera em terceira pessoa
-    const camDist = 6.2;
+    const camDist = this.camDist;
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const cx = this.position.x + Math.sin(this.yaw) * cp * camDist;
     const cz = this.position.z + Math.cos(this.yaw) * cp * camDist;

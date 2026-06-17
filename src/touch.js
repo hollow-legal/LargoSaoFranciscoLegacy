@@ -1,7 +1,8 @@
 // Controles touch para dispositivos móveis.
 export let touchMode = false;
 
-const JOY_MAX = 52; // raio máximo do joystick em px
+const JOY_MAX = 52;    // raio máximo do joystick em px
+const CAM_SENS = 7;    // sensibilidade da câmera (px de tela → delta de yaw/pitch)
 
 export function initTouch(player, spells, hud, onCast, onSpellSelect, onTalk) {
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -27,7 +28,6 @@ function patchIntro(player) {
   intro.addEventListener('touchstart', (e) => {
     e.preventDefault();
     intro.style.display = 'none';
-    // dispara o mesmo evento customizado que main.js ouve
     document.dispatchEvent(new CustomEvent('touchstart-game'));
   }, { passive: false });
 }
@@ -84,7 +84,6 @@ function setupJoystick(player, ui) {
     player.keys['KeyS'] = ny >  0.28;
     player.keys['KeyA'] = nx < -0.28;
     player.keys['KeyD'] = nx >  0.28;
-    // correr se joystick empurrado até a borda
     player.keys['ShiftLeft'] = Math.hypot(nx, ny) > 0.82;
   }
 
@@ -93,38 +92,117 @@ function setupJoystick(player, ui) {
   }
 }
 
-// ── Câmera (drag no lado direito) ─────────────────────────────────────────────
+// ── Câmera (drag no lado direito + pinch para zoom) ───────────────────────────
 function setupCamera(player, ui) {
-  const zone = ui.querySelector('#cam-zone');
-  const pointers = new Map(); // id → {x,y}
+  const zone      = ui.querySelector('#cam-zone');
+  const indicator = ui.querySelector('#cam-indicator');
+  const hint      = ui.querySelector('#cam-hint');
+  const pointers  = new Map(); // id → {x, y}
+
+  // Inércia: guarda última velocidade e decai após soltar o dedo
+  let velX = 0, velY = 0;
+  let inertiaId = null;
+
+  function tickInertia() {
+    if (Math.abs(velX) < 0.08 && Math.abs(velY) < 0.08) {
+      inertiaId = null;
+      return;
+    }
+    player.onMouseMove(velX, velY);
+    velX *= 0.84;
+    velY *= 0.84;
+    inertiaId = requestAnimationFrame(tickInertia);
+  }
 
   zone.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    if (inertiaId) { cancelAnimationFrame(inertiaId); inertiaId = null; }
+    velX = 0; velY = 0;
     for (const t of e.changedTouches) {
       pointers.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+    if (e.touches.length === 1) {
+      showIndicator(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      if (hint) hint.style.display = 'none';
+    } else {
+      hideIndicator();
     }
   }, { passive: false });
 
   zone.addEventListener('touchmove', (e) => {
     e.preventDefault();
+
+    // ── Pinch para zoom (2 dedos) ────────────────────────────────────────────
+    if (e.touches.length >= 2) {
+      const ids = [...pointers.keys()];
+      if (ids.length >= 2) {
+        const t0 = findTouch(e.touches, ids[0]);
+        const t1 = findTouch(e.touches, ids[1]);
+        const p0 = pointers.get(ids[0]);
+        const p1 = pointers.get(ids[1]);
+        if (t0 && t1 && p0 && p1) {
+          const prevDist = Math.hypot(p0.x - p1.x, p0.y - p1.y);
+          const curDist  = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+          const delta = prevDist - curDist;
+          player.camDist = Math.max(3.5, Math.min(10.0, player.camDist + delta * 0.06));
+        }
+      }
+    } else {
+      // ── Rotação com 1 dedo ───────────────────────────────────────────────
+      for (const t of e.changedTouches) {
+        const prev = pointers.get(t.identifier);
+        if (!prev) continue;
+        const dx = t.clientX - prev.x;
+        const dy = t.clientY - prev.y;
+        player.onMouseMove(dx * CAM_SENS, dy * CAM_SENS);
+        velX = dx * CAM_SENS;
+        velY = dy * CAM_SENS;
+        moveIndicator(t.clientX, t.clientY);
+      }
+    }
+
     for (const t of e.changedTouches) {
-      const prev = pointers.get(t.identifier);
-      if (!prev) continue;
-      const dx = t.clientX - prev.x;
-      const dy = t.clientY - prev.y;
-      player.onMouseMove(dx * 18, dy * 18); // 18 ≈ equivalente à sensibilidade do mouse
       pointers.set(t.identifier, { x: t.clientX, y: t.clientY });
     }
   }, { passive: false });
 
   zone.addEventListener('touchend', (e) => {
     for (const t of e.changedTouches) pointers.delete(t.identifier);
+    if (pointers.size === 0) {
+      hideIndicator();
+      if (Math.abs(velX) > 0.4 || Math.abs(velY) > 0.4) {
+        inertiaId = requestAnimationFrame(tickInertia);
+      }
+    }
   });
+
+  function findTouch(touchList, id) {
+    for (const t of touchList) if (t.identifier === id) return t;
+    return null;
+  }
+
+  function showIndicator(x, y) {
+    const r = zone.getBoundingClientRect();
+    indicator.style.left = (x - r.left) + 'px';
+    indicator.style.top  = (y - r.top)  + 'px';
+    indicator.style.opacity = '1';
+    indicator.style.transform = 'translate(-50%,-50%) scale(1)';
+  }
+
+  function moveIndicator(x, y) {
+    const r = zone.getBoundingClientRect();
+    indicator.style.left = (x - r.left) + 'px';
+    indicator.style.top  = (y - r.top)  + 'px';
+  }
+
+  function hideIndicator() {
+    indicator.style.opacity = '0';
+    indicator.style.transform = 'translate(-50%,-50%) scale(0.6)';
+  }
 }
 
 // ── Botões de ação ────────────────────────────────────────────────────────────
 function setupButtons(player, spells, hud, ui, onCast, onSpellSelect, onTalk) {
-  // Feitiços 1/2/3
   ui.querySelectorAll('.t-spell').forEach(btn => {
     btn.addEventListener('touchstart', (e) => {
       e.preventDefault();
@@ -136,14 +214,12 @@ function setupButtons(player, spells, hud, ui, onCast, onSpellSelect, onTalk) {
     }, { passive: false });
   });
 
-  // Lançar feitiço
   const castBtn = ui.querySelector('#t-cast');
   castBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
     onCast();
   }, { passive: false });
 
-  // Pulo — mantém a tecla pressionada enquanto o dedo está no botão
   const jumpBtn = ui.querySelector('#t-jump');
   jumpBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -151,7 +227,6 @@ function setupButtons(player, spells, hud, ui, onCast, onSpellSelect, onTalk) {
   }, { passive: false });
   jumpBtn.addEventListener('touchend', () => { delete player.keys['Space']; });
 
-  // Conversar
   const talkBtn = ui.querySelector('#t-talk');
   talkBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -167,7 +242,10 @@ function buildUI() {
     <div id="joy-zone">
       <div id="joy-base"><div id="joy-knob"></div></div>
     </div>
-    <div id="cam-zone"></div>
+    <div id="cam-zone">
+      <div id="cam-indicator"></div>
+      <div id="cam-hint">Arraste para girar a câmera</div>
+    </div>
     <div id="btn-zone">
       <div id="spell-row">
         <button class="t-spell active" data-i="0">1<br><small>Lumen</small></button>
@@ -190,25 +268,28 @@ function injectStyles() {
     #touch-overlay {
       position: fixed; inset: 0; z-index: 5;
       pointer-events: none;
-      display: flex; align-items: stretch;
     }
+    /* Joystick cobre 44% esquerdo */
     #joy-zone {
       pointer-events: all;
-      position: relative;
-      width: 44%; flex-shrink: 0;
+      position: absolute;
+      left: 0; top: 0; width: 44%; height: 100%;
     }
+    /* Zona de câmera cobre 56% direito (antes era ~12% por bug de layout) */
     #cam-zone {
       pointer-events: all;
-      flex: 1;
+      position: absolute;
+      right: 0; top: 0; width: 56%; height: 100%;
     }
+    /* Botões sobrepostos no canto inferior direito */
     #btn-zone {
       pointer-events: none;
-      width: 44%; flex-shrink: 0;
+      position: absolute;
+      right: 14px; bottom: 20px;
       display: flex; flex-direction: column;
       align-items: flex-end;
-      justify-content: flex-end;
-      padding: 0 14px 20px 0;
       gap: 10px;
+      z-index: 1;
     }
     #joy-base {
       position: absolute;
@@ -230,6 +311,39 @@ function injectStyles() {
       top: 50%; left: 50%;
       transform: translate(-50%,-50%);
       box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    /* Indicador visual do ponto de toque na câmera */
+    #cam-indicator {
+      position: absolute;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,0.45);
+      background: rgba(255,255,255,0.06);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s, transform 0.12s;
+      transform: translate(-50%,-50%) scale(0.6);
+      box-shadow: 0 0 14px rgba(255,255,255,0.08);
+    }
+    /* Dica que desaparece após alguns segundos */
+    #cam-hint {
+      position: absolute;
+      bottom: 28%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(240,230,210,0.38);
+      font-size: 11px;
+      font-family: Georgia, serif;
+      text-align: center;
+      pointer-events: none;
+      white-space: nowrap;
+      letter-spacing: 0.5px;
+      animation: cam-hint-fade 5s ease-out 1.5s both;
+    }
+    @keyframes cam-hint-fade {
+      0%   { opacity: 1; }
+      65%  { opacity: 1; }
+      100% { opacity: 0; }
     }
     #spell-row {
       pointer-events: all;
@@ -279,7 +393,6 @@ function injectStyles() {
       font-size: 14px; color: #c8f0c8; font-family: Georgia, serif;
       cursor: pointer; -webkit-tap-highlight-color: transparent;
     }
-    /* Oculta controles de teclado no mobile */
     @media (pointer: coarse) {
       #spellbar { display: none !important; }
       #crosshair { display: none !important; }
