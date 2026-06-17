@@ -2,7 +2,7 @@
 export let touchMode = false;
 
 const JOY_MAX = 52;    // raio máximo do joystick em px
-const CAM_SENS = 7;    // sensibilidade da câmera (px de tela → delta de yaw/pitch)
+const CAM_SENS = 1.5;  // sensibilidade da câmera (px de tela → delta de yaw/pitch)
 
 export function initTouch(player, spells, hud, onCast, onSpellSelect, onTalk) {
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -206,6 +206,7 @@ function setupButtons(player, spells, hud, ui, onCast, onSpellSelect, onTalk) {
   ui.querySelectorAll('.t-spell').forEach(btn => {
     btn.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const i = parseInt(btn.dataset.i);
       spells.select(i);
       onSpellSelect(i);
@@ -217,19 +218,25 @@ function setupButtons(player, spells, hud, ui, onCast, onSpellSelect, onTalk) {
   const castBtn = ui.querySelector('#t-cast');
   castBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     onCast();
   }, { passive: false });
 
   const jumpBtn = ui.querySelector('#t-jump');
   jumpBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     player.keys['Space'] = true;
   }, { passive: false });
-  jumpBtn.addEventListener('touchend', () => { delete player.keys['Space']; });
+  jumpBtn.addEventListener('touchend', (e) => {
+    e.stopPropagation();
+    delete player.keys['Space'];
+  });
 
   const talkBtn = ui.querySelector('#t-talk');
   talkBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     onTalk();
   }, { passive: false });
 }
@@ -346,10 +353,11 @@ function injectStyles() {
       100% { opacity: 0; }
     }
     #spell-row {
-      pointer-events: all;
+      pointer-events: none;
       display: flex; gap: 8px;
     }
     .t-spell {
+      pointer-events: all;
       width: 58px; height: 58px;
       border-radius: 10px;
       background: rgba(10,8,20,0.75);
@@ -365,10 +373,11 @@ function injectStyles() {
     }
     .t-spell small { font-size: 9px; opacity: 0.8; display: block; }
     #action-row {
-      pointer-events: all;
+      pointer-events: none;
       display: flex; gap: 12px; align-items: center;
     }
     #t-cast {
+      pointer-events: all;
       width: 72px; height: 72px;
       border-radius: 50%;
       background: rgba(139,26,26,0.8);
@@ -378,6 +387,7 @@ function injectStyles() {
       box-shadow: 0 0 16px rgba(220,80,80,0.4);
     }
     #t-jump {
+      pointer-events: all;
       width: 54px; height: 54px;
       border-radius: 50%;
       background: rgba(26,58,139,0.8);
@@ -386,6 +396,7 @@ function injectStyles() {
       cursor: pointer; -webkit-tap-highlight-color: transparent;
     }
     #t-talk {
+      pointer-events: all;
       width: 46px; height: 46px;
       border-radius: 50%;
       background: rgba(30,60,30,0.8);
