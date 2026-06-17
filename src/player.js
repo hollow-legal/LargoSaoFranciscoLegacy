@@ -100,11 +100,9 @@ export class Player {
     this.pitch = Math.max(-0.55, Math.min(0.7, this.pitch));
   }
 
-  // direção em que o feitiço será lançado
+  // direção em que o feitiço será lançado (yaw do personagem, sem pitch da câmera)
   castDirection() {
-    const d = new THREE.Vector3();
-    this.camera.getWorldDirection(d);
-    return d.normalize();
+    return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
   castOrigin() {
