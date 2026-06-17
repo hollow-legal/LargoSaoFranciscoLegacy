@@ -6,6 +6,7 @@ import { Player } from './player.js';
 import { SpellSystem, SPELLS } from './spells.js';
 import { spawnAutos, spawnFolhas, spawnEstudantes } from './entities.js';
 import { HUD } from './hud.js';
+import { initTouch, touchMode } from './touch.js';
 
 // ---------- Setup básico ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -75,7 +76,41 @@ const state = {
   autosArquivados: 0,
 };
 
-// ---------- Controles ----------
+// ---------- Modo debug ----------
+const params = new URLSearchParams(location.search);
+const autoMode = params.has('auto');
+const timeOffset = (parseFloat(params.get('hora')) || 0) * 240;
+if (autoMode) {
+  state.started = true;
+  document.getElementById('intro').style.display = 'none';
+  if (params.has('x')) player.position.x = parseFloat(params.get('x'));
+  if (params.has('z')) player.position.z = parseFloat(params.get('z'));
+  if (params.has('yaw')) player.yaw = parseFloat(params.get('yaw'));
+  if (params.has('pitch')) player.pitch = parseFloat(params.get('pitch'));
+}
+
+// ---------- Callbacks de feitiço (compartilhados com touch) ----------
+function doCast() {
+  if (!spells.cast(player)) {
+    hud.message('<small>Mana insuficiente...</small>', 1200);
+  }
+}
+function doSpellSelect(i) { hud.setSpell(i); }
+
+// ---------- Touch controls (mobile) ----------
+initTouch(player, spells, hud, doCast, doSpellSelect, () => {
+  if (nearestNPC) hud.message(nearestNPC.fala, 4000);
+});
+
+// Inicia o jogo ao tocar a tela (mobile sem pointer lock)
+document.addEventListener('touchstart-game', () => {
+  if (!state.started) {
+    state.started = true;
+    hud.message('Recolha as <b>Folhas do Códice</b> e arquive os <b>Autos Malditos</b>!', 5000);
+  }
+});
+
+// ---------- Controles de teclado/mouse ----------
 const intro = document.getElementById('intro');
 intro.addEventListener('click', () => {
   document.body.requestPointerLock();
@@ -109,40 +144,24 @@ document.addEventListener('keyup', (e) => { player.keys[e.code] = false; });
 
 document.addEventListener('mousedown', (e) => {
   if ((document.pointerLockElement !== document.body && !autoMode) || e.button !== 0) return;
-  if (!spells.cast(player)) {
-    hud.message('<small>Mana insuficiente...</small>', 1200);
-  }
+  doCast();
 });
 
 // ---------- Ciclo dia/noite (um dia = 4 minutos) ----------
-const DAY_LENGTH = 240;// Modo debug para testes e capturas: ?auto inicia sem pointer lock,
-// ?hora=0..1 ajusta a fração do dia, ?x= ?z= ?yaw= ?pitch= posicionam o jogador.
-const params = new URLSearchParams(location.search);
-const autoMode = params.has('auto');
-const timeOffset = (parseFloat(params.get('hora')) || 0) * DAY_LENGTH;
-if (autoMode) {
-  state.started = true;
-  intro.style.display = 'none';
-  if (params.has('x')) player.position.x = parseFloat(params.get('x'));
-  if (params.has('z')) player.position.z = parseFloat(params.get('z'));
-  if (params.has('yaw')) player.yaw = parseFloat(params.get('yaw'));
-  if (params.has('pitch')) player.pitch = parseFloat(params.get('pitch'));
-}
-
+const DAY_LENGTH = 240;
 const skyDay = new THREE.Color(0x9bb8d4);
 const skyDusk = new THREE.Color(0xd98a4a);
 const skyNight = new THREE.Color(0x0a0a1e);
 const tmpColor = new THREE.Color();
 
 function updateDayNight(elapsed) {
-  const t = (elapsed / DAY_LENGTH) % 1;            // 0 = amanhecer
+  const t = (elapsed / DAY_LENGTH) % 1;
   const ang = t * Math.PI * 2;
-  const sunH = Math.sin(ang);                       // altura do sol (-1..1)
+  const sunH = Math.sin(ang);
   sun.position.set(Math.cos(ang) * 80, sunH * 80, 30);
   sun.intensity = Math.max(0, sunH) * 2.4;
   hemi.intensity = 0.32 + Math.max(0, sunH) * 0.75;
 
-  // cor do céu: dia -> crepúsculo -> noite
   if (sunH > 0.25) tmpColor.copy(skyDay);
   else if (sunH > -0.15) {
     const k = (sunH + 0.15) / 0.4;
@@ -181,7 +200,6 @@ function animate() {
   world.waterMat.opacity = 0.75 + Math.sin(elapsed * 2) * 0.08;
 
   if (!state.started) {
-    // câmera cinematográfica girando sobre o pátio na tela inicial
     const a = elapsed * 0.1;
     camera.position.set(Math.cos(a) * 26, 14, Math.sin(a) * 26);
     camera.lookAt(0, 3, 0);
@@ -191,13 +209,11 @@ function animate() {
 
   player.update(dt, world.fountainZone);
 
-  // inimigos
   for (const auto of autos) {
     const touched = auto.update(dt, player.position);
     if (touched && player.takeDamage(12)) {
       hud.message('<small>Você foi <b>citado</b> por um Auto Maldito! (-12)</small>', 1500);
     }
-    // escudo Habeas Corpus repele os autos
     if (player.shielded && auto.alive) {
       const d = auto.group.position.clone().sub(player.position);
       d.y = 0;
@@ -208,13 +224,11 @@ function animate() {
     }
   }
 
-  // morte
   if (player.hp <= 0) {
     player.respawn();
     hud.message('<small>Você desmaiou de exaustão processual...<br/>Acordou junto ao monumento.</small>', 3500);
   }
 
-  // feitiços e acertos
   const hits = spells.update(dt, autos);
   for (const { enemy, projectile } of hits) {
     const arquivado = enemy.hit(projectile.damage, projectile.dir, projectile.knockback);
@@ -226,7 +240,6 @@ function animate() {
     }
   }
 
-  // colecionáveis
   for (const f of folhas) {
     if (f.update(dt, player.position)) {
       state.folhas++;
@@ -236,7 +249,6 @@ function animate() {
     }
   }
 
-  // NPCs e interação
   nearestNPC = null;
   let best = 3;
   for (const npc of estudantes) {
